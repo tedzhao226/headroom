@@ -68,6 +68,39 @@ Three moving parts:
 Dispatch decisions happen in SAQ's `before_process` hook, not in `run_task` — so the
 gate sees the canonical job ID the moment the worker picks it up.
 
+## Night queue semantics
+
+Night jobs are window-gated **at worker pickup**, not throughout their lifetime.
+The window check fires once per pickup; the capacity wait that follows is unbounded by the window.
+
+1. **At submit** (`POST /tasks` with `queue: "night"`) the job is enqueued with
+   `scheduled = next_window_start_utc(...)`.
+   SAQ holds it in `saq_jobs` until the next window opens (default 22:00 UTC) — the
+   worker doesn't poll or wake on it before then.
+2. **At pickup** (`before_process`) the worker re-checks the window.
+   If the job somehow lands outside it (manual enqueue without `scheduled`, config
+   change mid-flight, clock skew) it's re-enqueued once with `scheduled` set to the
+   next window start.
+   This repeats up to `max_reschedules`, after which the job is marked `FAILED` with
+   `"max reschedules reached"`.
+   Each reschedule defers to a strictly-future timestamp, so there is no busy loop.
+3. **During the capacity wait** the window is **not** re-checked.
+   Once `is_within_window(...)` passes, the job blocks on
+   `gate.wait_for_capacity(estimated_tokens)`.
+   If the endpoint stays saturated past 06:00 UTC, the job will still dispatch the
+   moment headroom opens — even into the daytime.
+
+This is intentional.
+A job that has already been picked up holds a slot in `night_queue_concurrency` and
+has a row updated to `RUNNING` only after capacity is reserved; cancelling it
+mid-wait to re-enqueue would thrash the queue and lose FIFO ordering against other
+waiting night jobs.
+The trade is: night-queue jobs are *best-effort overnight*, not *guaranteed
+overnight*.
+If you need a hard cutoff (no dispatch outside the window, ever), add a deadline
+to the capacity wait or re-check the window immediately before `gate.reserve(...)`
+in `src/headroom/queue/hooks.py`.
+
 ## Stack
 
 - **FastAPI** — thin HTTP API (Router → Service → Repository)
