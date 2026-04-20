@@ -1,0 +1,20 @@
+pt_monitor_interval = 60
+pt_monitor_failure_threshold = 5
+pt_night_window_start_utc = "22:00"
+pt_night_window_end_utc = "06:00"
+pt_num_retries = 3
+max_reschedules = 5
+day_queue_concurrency = 10
+night_queue_concurrency = 3
+
+[[pt_endpoints]]
+name = "flash-us"
+model = "gemini-2.5-flash"
+region = "us-central1"
+capacity_tps = 5000
+
+[[pt_endpoints]]
+name = "pro-us"
+model = "gemini-2.5-pro"
+region = "us-central1"
+capacity_tps = 3000

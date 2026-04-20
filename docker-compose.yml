@@ -1,0 +1,69 @@
+x-app-env: &app-env
+  DATABASE_URL: postgresql+asyncpg://headroom:headroom@db:5432/headroom
+  GCP_PROJECT: mock-project
+  HEADROOM_USE_MOCKS: "1"
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: headroom
+      POSTGRES_PASSWORD: headroom
+      POSTGRES_DB: headroom
+    ports:
+      - "5432:5432"
+    volumes:
+      - headroom_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U headroom -d headroom"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    profiles: ["mock"]
+    build: .
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  api:
+    profiles: ["mock"]
+    build: .
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"
+    command: ["uvicorn", "headroom.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  worker-day:
+    profiles: ["mock"]
+    build: .
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: ["headroom-worker", "day", "--mock"]
+
+  worker-night:
+    profiles: ["mock"]
+    build: .
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: ["headroom-worker", "night", "--mock"]
+
+volumes:
+  headroom_pgdata:
