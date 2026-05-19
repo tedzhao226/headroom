@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-headroom-mvp`
 **Created**: 2026-04-17
-**Status**: Draft
+**Status**: Implemented snapshot as of 2026-05-20
 **Input**: "A minimal system that monitors Vertex AI PT capacity, gates LLM calls on capacity + time window, and queues jobs via SAQ[postgres]."
 
 ## User Scenarios & Testing
@@ -13,7 +13,8 @@ A client submits an LLM job to the `day` queue. The job persists immediately, an
 
 **Why this priority**: This is the simplest, highest-value path — the one all other flows build on.
 
-**Independent Test**: `POST /tasks` with `queue="day"` returns a task id; the job row is `pending`; a worker picks it up, calls the provider, and the row flips to `complete` with an `actual_token_count`.
+**Current Verification**: `scripts/smoke.py` exercises `POST /tasks` against the mock stack.
+Repository and provider behavior are covered by unit and integration tests.
 
 **Acceptance Scenarios**:
 1. **Given** PT has free capacity, **When** a day task is submitted, **Then** it dispatches within seconds and the response becomes `complete`.
@@ -28,11 +29,12 @@ A client submits a backlog job to the `night` queue. The job is held until the U
 
 **Why this priority**: Shifts non-urgent batch work to off-peak PT capacity.
 
-**Independent Test**: `POST /tasks` with `queue="night"` at 12:00 UTC returns a task id with `scheduled=next 22:00 UTC`; the worker does not dispatch before 22:00. Inside the window, it dispatches when capacity allows.
+**Current Verification**: window math and reschedule hooks are covered by unit tests.
+There is no in-repo worker E2E test for a night task today.
 
 **Acceptance Scenarios**:
 1. **Given** the current time is outside the window, **When** a night task is submitted, **Then** it persists as `pending` and is not dispatched until the window opens.
-2. **Given** a night task starts during the window but the window closes before dispatch, **When** `before_process` runs outside the window, **Then** a replacement task is enqueued for the next window (up to 5 reschedules), and the original is marked failed.
+2. **Given** a night task is picked up outside the window, **When** `before_process` runs, **Then** a replacement queue job is enqueued for the next window (up to 5 reschedules), and the persisted task remains pending.
 3. **Given** 5 consecutive missed windows, **When** the sixth dispatch fails the window check, **Then** the task is marked `failed` permanently with `error="max reschedules reached"`.
 
 ---
@@ -43,7 +45,8 @@ An operator opens `/monitor` and inspects queue depth, running jobs, and failure
 
 **Why this priority**: Without visibility, operating the service is guesswork. SAQ provides this out of the box, so the cost is low.
 
-**Independent Test**: Navigate to `/monitor` in a browser with both queues defined. See pending/active/failed counts update as jobs progress.
+**Current Verification**: `/monitor` is mounted in `src/headroom/main.py`.
+Dashboard rendering is verified manually with the smoke stack.
 
 **Acceptance Scenarios**:
 1. **Given** jobs are queued, **When** the operator visits `/monitor`, **Then** the SAQ dashboard shows both queues and their job counts.
@@ -88,7 +91,7 @@ An operator opens `/monitor` and inspects queue depth, running jobs, and failure
 
 ### Measurable Outcomes
 
-- **SC-001**: A day task submitted when capacity is free transitions `pending → running → complete` within 10 seconds (mock provider in tests).
+- **SC-001**: A day task submitted when capacity is free transitions `pending → running → complete` within 10 seconds in the mock stack.
 - **SC-002**: A night task submitted at 12:00 UTC is held until ≥22:00 UTC before dispatching.
 - **SC-003**: When 20 concurrent waiters request 500 tokens on a 5,000-token endpoint that starts with 0 headroom and Monitor then reports 4,500 tps usage, no more than 1 waiter proceeds per 500-token slot; total reservations never exceed 5,000.
 - **SC-004**: With GCP Monitoring disabled for 5 minutes, the gate switches to conservative mode; no task dispatches beyond 10% of configured capacity during that window.

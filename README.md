@@ -197,8 +197,8 @@ capacity_tps = 5000
 
 ```bash
 make test                                # full suite
-uv run pytest tests/unit -q              # fast unit tests
-uv run pytest tests/integration -q       # spins up testcontainers Postgres
+uv run python -m pytest tests/unit -q    # fast unit tests
+uv run python -m pytest tests/integration -q  # spins up testcontainers Postgres
 ```
 
 Currently 68 tests (60 unit + 8 integration).

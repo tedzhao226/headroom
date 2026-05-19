@@ -1,8 +1,6 @@
 import asyncio
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from headroom.core.config import EndpointConfig
 from headroom.repository.monitor_samples import MonitorSampleRecord
 from headroom.services.capacity_gate import InMemoryCapacityGate

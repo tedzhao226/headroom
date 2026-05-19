@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from headroom.api.deps import SettingsDep
 from headroom.core.time_window import next_window_start_utc
-from headroom.models.job import JobStatus, QueueType
+from headroom.models.job import QueueType
 from headroom.schemas.tasks import TaskResponse, TaskSubmit
 
 router = APIRouter(tags=["tasks"])

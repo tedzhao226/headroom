@@ -54,7 +54,7 @@ psql: ## Open psql shell against the running db container
 	docker compose exec db psql -U headroom -d headroom
 
 test: ## Run all tests
-	uv run pytest -q
+	uv run python -m pytest -q
 
 fmt: ## Format with ruff
 	uv run ruff format .

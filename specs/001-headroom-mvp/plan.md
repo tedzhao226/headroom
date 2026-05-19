@@ -3,6 +3,7 @@
 **Spec**: [`spec.md`](./spec.md)
 **Constitution**: [`/.specify/memory/constitution.md`](../../.specify/memory/constitution.md)
 **Created**: 2026-04-17
+**Status**: Implemented snapshot as of 2026-05-20
 
 ## Tech stack (from constitution §"Tech stack (locked)")
 
@@ -27,13 +28,15 @@ src/headroom/
 │   └── time_window.py        # is_within_window, next_window_start_utc
 ├── models/
 │   ├── __init__.py
-│   └── job.py                # SQLAlchemy Job + enums
+│   ├── job.py                # SQLAlchemy Job + enums
+│   └── monitor_sample.py     # SQLAlchemy monitor_samples row
 ├── schemas/
 │   ├── __init__.py
 │   └── tasks.py              # Pydantic request/response
 ├── repository/
 │   ├── __init__.py
-│   └── jobs.py               # JobRepository
+│   ├── jobs.py               # JobRepository
+│   └── monitor_samples.py    # monitor sample writes
 ├── services/
 │   ├── __init__.py
 │   ├── capacity_gate.py      # CapacityGate Protocol + InMemoryCapacityGate
@@ -52,14 +55,16 @@ src/headroom/
     └── tasks.py              # POST /tasks, GET /tasks/{id}
 migrations/
 ├── env.py
-├── script.py.mako
 └── versions/
-    └── 0001_create_jobs.py
+    ├── 0001_create_jobs.py
+    └── 0002_monitor_samples.py
 tests/
 ├── conftest.py
 ├── unit/
 │   ├── test_capacity_gate.py
 │   ├── test_monitor.py
+│   ├── test_monitor_samples_callback.py
+│   ├── test_params.py
 │   ├── test_provider.py
 │   ├── test_config.py
 │   ├── test_credentials.py
@@ -67,7 +72,7 @@ tests/
 └── integration/
     ├── conftest.py           # testcontainers pg fixture
     ├── test_repository.py
-    └── test_end_to_end.py
+    └── test_monitor_sample_repository.py
 ```
 
 ## Data model (`jobs`)
@@ -181,10 +186,12 @@ Env overrides: `DATABASE_URL`, `GCP_PROJECT`, `GCP_SA_KEY`.
 
 ## Verification strategy
 
-Aligns with `spec.md` success criteria:
+Current verification:
 
-- **SC-001** ↔ `tests/integration/test_end_to_end.py::test_day_task_runs_to_complete` (mock provider)
-- **SC-002** ↔ `tests/integration/test_end_to_end.py::test_night_task_scheduled_for_window` (freezegun)
-- **SC-003** ↔ `tests/unit/test_capacity_gate.py::test_concurrent_waiters_do_not_oversubscribe`
-- **SC-004** ↔ `tests/unit/test_monitor.py::test_conservative_mode_after_n_failures`
-- **SC-005** ↔ manual smoke (documented in README + tasks.md)
+- 68 tests collect today: 60 unit and 8 integration.
+- **SC-001** ↔ `scripts/smoke.py` against the dockerized mock stack.
+- **SC-002** ↔ unit coverage for window math and queue hook rescheduling.
+- **SC-003** ↔ `tests/unit/test_capacity_gate.py::test_wait_for_capacity_claim_is_atomic_across_waiters`.
+- **SC-004** ↔ `tests/unit/test_monitor.py::test_vertex_monitor_consecutive_failures_enter_conservative_mode`.
+- **SC-005** ↔ manual smoke of `/monitor` with `make smoke-up`.
+- In-process worker E2E tests are not present in the repo today.
